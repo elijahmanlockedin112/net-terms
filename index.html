@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Net Invaders</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: an arcade cabinet screen. Clue on top, a still board of term "invaders" below; only a hit moves. Deliberately one dark theme. */
+:root {
+  --bg: #0B0E1A;
+  --panel: #12172B;
+  --line: #262D4D;
+  --ink: #F3EFE4;
+  --muted: #9299B5;
+  --hot: #FFB23F;      /* player colour: score, hits, buttons */
+  --hot-ink: #1B1203;
+  --bad: #FF6257;
+  --shadow: #05070F;
+  --f-pixel: "Press Start 2P", ui-monospace, Consolas, monospace;
+  --f-term: "VT323", ui-monospace, Consolas, monospace;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--f-body); font-size: 17px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
+svg.px { shape-rendering: crispEdges; display: block; }
+.wrap { max-width: 680px; margin: 0 auto; padding-inline: 16px; padding-block: 0 40px; }
+
+/* ---------- top bar ---------- */
+.top { display: flex; align-items: center; gap: 10px; padding-block: 12px; }
+.top .ttl { flex: 1; min-width: 0; font-family: var(--f-pixel); font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+.icon {
+  flex: none; width: 42px; height: 42px; display: grid; place-items: center; padding: 0;
+  background: var(--panel); border: 2px solid var(--line);
+}
+.icon svg { width: 18px; height: 18px; stroke: var(--ink); fill: none; stroke-width: 2.2; stroke-linecap: square; }
+
+/* ---------- arcade buttons ---------- */
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 56px; padding: 14px 16px;
+  font-family: var(--f-pixel); font-size: 12px; line-height: 1.5; letter-spacing: .02em; text-transform: uppercase; text-align: center;
+  background: var(--panel); color: var(--ink); border: 2px solid var(--line); box-shadow: 4px 4px 0 var(--shadow);
+}
+.btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--shadow); }
+.btn.primary { background: var(--hot); border-color: var(--hot); color: var(--hot-ink); }
+.btn.wide { width: 100%; }
+.row { display: flex; gap: 12px; }
+.row > .btn { flex: 1; min-width: 0; }
+.label { font-family: var(--f-pixel); font-size: 10px; line-height: 1.6; letter-spacing: .04em; color: var(--muted); margin: 0; text-transform: uppercase; }
+
+/* ---------- home ---------- */
+.home { display: flex; flex-direction: column; gap: 22px; padding-top: 28px; }
+.troop { display: flex; gap: 18px; color: var(--ink); }
+.troop svg { height: 24px; width: auto; }
+.troop .b { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .troop .a { animation: fa 1.2s steps(1) infinite; }
+  .troop .b { display: block; animation: fb 1.2s steps(1) infinite; }
+}
+@keyframes fa { 0% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes fb { 0% { opacity: 0; } 50% { opacity: 1; } }
+.troop span { position: relative; display: block; }
+.troop span svg.b { position: absolute; inset: 0; }
+h1.title { font-family: var(--f-pixel); font-weight: 400; font-size: clamp(30px, 9.6vw, 52px); line-height: 1.15; margin: 0; letter-spacing: -.02em; }
+h1.title em { font-style: normal; color: var(--hot); }
+.sub { margin: 0; color: var(--muted); max-width: 44ch; }
+.starbar { display: flex; align-items: center; gap: 10px; font-family: var(--f-pixel); font-size: 13px; }
+.starbar svg { width: 18px; height: 18px; color: var(--hot); }
+.starbar span { color: var(--muted); }
+.levels { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--line); }
+.levels button {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  width: 100%; padding: 14px 2px; background: none; border: 0; border-bottom: 2px solid var(--line); text-align: left;
+}
+.levels .lv { font-family: var(--f-pixel); font-size: 13px; color: var(--muted); }
+.levels .nm { font-family: var(--f-term); font-size: 30px; line-height: .95; }
+.levels .nm small { display: block; font-family: var(--f-body); font-size: 14px; line-height: 1.4; color: var(--muted); margin-top: 4px; }
+.levels .is-next .lv, .levels .is-next .nm { color: var(--hot); }
+.stars { display: flex; gap: 3px; }
+.stars svg { width: 15px; height: 15px; color: var(--line); }
+.stars svg.on { color: var(--hot); }
+
+/* ---------- briefing ---------- */
+.brief { display: flex; flex-direction: column; gap: 18px; padding-bottom: 96px; }
+h2.lvl { font-family: var(--f-term); font-weight: 400; font-size: clamp(46px, 13vw, 64px); line-height: .9; margin: 0; }
+.chant { border: 2px solid var(--line); background: var(--panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.chant p.say { margin: 0; font-weight: 700; font-size: 18px; line-height: 1.4; color: var(--hot); }
+.intel { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--line); }
+.intel li { padding: 14px 0; border-bottom: 2px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+.intel .t { font-family: var(--f-term); font-size: 32px; line-height: 1; margin: 0; }
+.intel .t span { font-family: var(--f-pixel); font-size: 9px; color: var(--muted); vertical-align: middle; margin-left: 8px; }
+.intel .d { margin: 0; }
+.intel .h { margin: 0; font-weight: 700; color: var(--hot); font-size: 16px; }
+.intel .x { margin: 0; color: var(--muted); font-size: 15px; }
+.dock { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--bg); border-top: 2px solid var(--line); }
+.dock .btn { max-width: 648px; margin: 0 auto; }
+
+/* ---------- game ---------- */
+.game { max-width: 760px; margin: 0 auto; padding-inline: 16px; padding-block: 0 24px; display: flex; flex-direction: column; gap: 14px; }
+.hud { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; gap: 8px; padding-top: 12px; }
+.hud .score { font-family: var(--f-pixel); font-size: 16px; color: var(--hot); font-variant-numeric: tabular-nums; min-width: 0; overflow: hidden; }
+.hud .combo { font-family: var(--f-pixel); font-size: 10px; padding: 6px 7px; border: 2px solid var(--line); color: var(--muted); }
+.hud .combo.hot { border-color: var(--hot); color: var(--hot); }
+.lives { display: flex; gap: 4px; }
+.lives svg { width: 18px; height: 12px; color: var(--hot); }
+.lives svg.off { color: var(--line); }
+.clue { border: 2px solid var(--line); background: var(--panel); padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+.clue .head { display: flex; justify-content: space-between; gap: 10px; }
+.clue .head .kind { color: var(--hot); }
+.clue p.txt { margin: 0; font-size: 20px; line-height: 1.42; font-weight: 700; text-wrap: pretty; min-height: 2.84em; }
+.clue p.hint { margin: 0; padding-top: 8px; border-top: 2px dashed var(--line); font-size: 16px; color: var(--hot); }
+.clue p.hint b { font-family: var(--f-term); font-size: 24px; font-weight: 400; color: var(--ink); }
+.speed { height: 4px; background: var(--line); }
+.speed i { display: block; height: 100%; background: var(--hot); transform-origin: left; }
+.board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (min-width: 560px) {
+  .board { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .clue p.txt { font-size: 24px; }
+  .tile { min-height: 104px; }
+  .tile .lb { font-size: 30px; }
+}
+.tile {
+  position: relative; min-height: 84px; padding: 12px 8px 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  background: var(--panel); border: 2px solid var(--line); box-shadow: 3px 3px 0 var(--shadow); color: var(--ink);
+}
+.tile svg { height: 22px; width: auto; }
+.tile .lb { font-family: var(--f-term); font-size: 25px; line-height: .95; text-align: center; overflow-wrap: anywhere; }
+@media (hover: hover) { .tile:hover:not([disabled]) { border-color: var(--ink); } }
+.tile:active:not([disabled]) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow); }
+.tile.hit { border-color: var(--hot); color: var(--hot); }
+.tile.gone { background: none; border-style: dashed; box-shadow: none; color: var(--line); }
+.tile.gone svg, .tile.gone .lb { visibility: hidden; }
+.tile.nope { border-color: var(--bad); color: var(--bad); }
+.tile.reveal { border-color: var(--hot); color: var(--hot); }
+.tile.reveal::after { content: "THIS ONE"; position: absolute; top: -9px; right: 8px; font-family: var(--f-pixel); font-size: 8px; padding: 3px 5px; background: var(--hot); color: var(--hot-ink); }
+.tile[disabled] { cursor: default; }
+.wiggle { animation: wiggle .22s ease; }
+@keyframes wiggle { 33% { transform: translateX(-4px); } 66% { transform: translateX(4px); } }
+
+/* ---------- results ---------- */
+.res { display: flex; flex-direction: column; gap: 18px; padding-top: 18px; }
+.res .kicker { font-family: var(--f-pixel); font-size: 15px; margin: 0; color: var(--hot); }
+.res .kicker.loss { color: var(--bad); }
+.res .big { font-family: var(--f-pixel); font-size: clamp(34px, 11vw, 56px); line-height: 1.1; margin: 0; font-variant-numeric: tabular-nums; }
+.res .stars svg { width: 34px; height: 34px; }
+.res .stars { gap: 8px; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 2px solid var(--line); border-bottom: 2px solid var(--line); }
+.facts div { padding: 12px 0; display: flex; flex-direction: column; gap: 4px; }
+.facts div + div { border-left: 2px solid var(--line); padding-left: 12px; }
+.facts b { font-family: var(--f-term); font-size: 36px; font-weight: 400; line-height: .9; }
+.facts span { font-size: 13px; color: var(--muted); }
+.review { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--line); }
+.review li { padding: 12px 0; border-bottom: 2px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+.review b { font-family: var(--f-term); font-size: 28px; font-weight: 400; line-height: 1; }
+.review span { color: var(--hot); font-weight: 700; font-size: 16px; }
+
+#fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+@media (prefers-reduced-motion: reduce) { .wiggle { animation: none; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<canvas id="fx"></canvas>
+
+<script>
+"use strict";
+/* ============ CONTENT (n = number on the study guide) ============ */
+const TERMS = [
+ {n:1,t:"Internet",
+  d:"The worldwide network of connected computer networks that lets devices send data to each other.",
+  h:"INTER-net = a net BETWEEN networks. It's the roads and wires that everything else rides on.",
+  x:"Undersea cables, Wi-Fi routers, and cell towers are all part of the internet.",
+  s:"Your phone, your school's network, and millions of other networks all link into one global system. What is it?"},
+ {n:2,t:"World Wide Web",
+  d:"The huge collection of linked web pages that you reach over the internet using a browser.",
+  h:"Internet = the roads. Web = the stores along them. The web runs ON the internet, so they're not the same thing.",
+  x:"Tim Berners-Lee invented the web in 1989. Every https:// page is part of it.",
+  s:"You click from a recipe page to a cooking video page to a grocery page, all through links. What are you using?"},
+ {n:3,t:"Web browser",
+  d:"An app you use to find, open, and view web pages, like Chrome, Safari, Edge, or Firefox.",
+  h:"You BROWSE with a BROWSER. Chrome is a browser; Google is a search engine. Don't mix them up.",
+  x:"Chrome, Safari, Firefox, and Edge are all web browsers.",
+  s:"Maya opens Chrome and types in her school's web address. What kind of app is Chrome?"},
+ {n:4,t:"Web site",
+  d:"A group of related web pages that share one domain name, like all the pages of nasa.gov.",
+  h:"Site = a location. One web SITE lives at one address and holds many pages.",
+  x:"youtube.com, wikipedia.org, and your school's site are each one website.",
+  s:"nasa.gov has a home page, a missions page, and a photos page, all under one name. What do they form together?"},
+ {n:5,t:"Server",
+  d:"A powerful computer that stores websites, files, or data and sends them to devices that ask for them.",
+  h:"A server SERVES, like a waiter. You ask for a page, it brings the page to you.",
+  x:"YouTube's videos sit on servers in giant data centers.",
+  s:"When you open a video, a computer in a data center far away sends it to your phone. What is that computer?"},
+ {n:6,t:"Search engine",
+  d:"A website that searches the web for pages matching the keywords you type, like Google or Bing.",
+  h:"An ENGINE that SEARCHES. You type keywords, it hands back a list of results.",
+  x:"Google, Bing, and DuckDuckGo are search engines.",
+  s:"You type \"best pizza near me\" into Google and get a list of results. What is Google acting as?"},
+ {n:7,t:"Hyperlink",
+  d:"Clickable text or an image that jumps you to another web page, file, or spot on a page.",
+  h:"HYPER = super fast. A hyperlink is a shortcut LINK: click it and you jump.",
+  x:"Blue underlined words like \"read more\" are usually hyperlinks.",
+  s:"In an article, the blue underlined words \"see the full list\" take you to another page when clicked. What are they?"},
+ {n:8,t:"URL",
+  d:"Uniform Resource Locator: the unique address of a web page, like https://www.nasa.gov.",
+  h:"Say U-R-L as \"yoU aRe Located\": it's the exact address where a page lives.",
+  x:"https://www.weather.gov is a URL.",
+  s:"You type https://www.weather.gov into the bar at the top of your browser. What is that text?"},
+ {n:9,t:"ARPANET",
+  d:"The first big computer network, built by the U.S. Department of Defense in 1969. It grew into the internet.",
+  h:"ARPA-NET: \"A Really Primitive Ancestor NETwork.\" The great-grandparent of the internet, born in '69.",
+  x:"Its first message in 1969 was supposed to be \"LOGIN\". The system crashed after \"LO\".",
+  s:"In 1969, the U.S. Department of Defense linked computers at four research sites. What was that early network called?"},
+ {n:10,t:"Software piracy",
+  d:"Illegally copying, sharing, or selling software without paying for it or getting permission.",
+  h:"Pirates steal treasure. Software pirates steal software.",
+  x:"Downloading a \"cracked\" copy of a paid game is software piracy.",
+  s:"Jay downloads a paid video game free from a sketchy site and gives copies to friends. What is this?"},
+ {n:11,t:"Cloud computing",
+  d:"Storing files and running programs on internet servers instead of only on your own device.",
+  h:"\"The cloud\" is just someone else's computer that you reach over the internet.",
+  x:"Google Drive, iCloud, OneDrive, and Google Docs all use cloud computing.",
+  s:"You start an essay in Google Docs at school and keep editing it at home on a different computer. What makes that work?"},
+ {n:12,t:"ISP",
+  d:"Internet Service Provider: a company that sells people and businesses access to the internet.",
+  h:"I-S-P: the company that Sells you the Pipe to the internet. You pay it every month.",
+  x:"Xfinity, AT&T, Spectrum, and Verizon are ISPs.",
+  s:"Your family pays Xfinity every month so your house can get online. What is Xfinity?"},
+ {n:13,t:"IP Address",
+  d:"A unique number that identifies each device on a network so data reaches the right place.",
+  h:"IP address = your device's mailing address, written in numbers. No address, no delivery.",
+  x:"192.168.1.24 is an IP address.",
+  s:"Your laptop's network settings show 192.168.1.24. What is that number?"},
+ {n:14,t:"VoIP",
+  d:"Voice over Internet Protocol: making voice calls over the internet instead of a regular phone line.",
+  h:"Say it out loud: \"VOICE over IP.\" Your voice rides the internet.",
+  x:"FaceTime Audio, Discord voice chat, WhatsApp calls, and Zoom use VoIP.",
+  s:"You talk to your cousin through Discord voice chat over Wi-Fi instead of a phone line. What is this called?"},
+ {n:15,t:"FTP",
+  d:"File Transfer Protocol: a set of rules for uploading and downloading files between computers.",
+  h:"The name says it: File Transfer. It moves files, like a moving truck.",
+  x:"Web designers use FTP apps like FileZilla to upload site files to a server.",
+  s:"A web designer uploads a website's files from a laptop to the server with FileZilla. What protocol is that?"},
+ {n:16,t:"Email",
+  d:"Electronic mail: messages sent over the internet from one email address to another.",
+  h:"E-mail = Electronic mail. The @ means \"at\": name AT this place.",
+  x:"In 1971, Ray Tomlinson sent the first email and picked the @ sign.",
+  s:"You send your teacher a message at mr.lee@school.org with your homework attached. What did you use?"},
+ {n:17,t:"Streaming",
+  d:"Playing video or audio while it downloads, without saving the whole file first.",
+  h:"Like a stream of water: it keeps flowing to you, and you use it as it arrives.",
+  x:"Netflix, Spotify, YouTube, and Twitch all stream.",
+  s:"A movie on Netflix starts playing right away, before the whole file has downloaded. What is this?"},
+ {n:18,t:"Multimedia",
+  d:"Content that combines two or more types of media, like text, images, sound, video, or animation.",
+  h:"MULTI = many. Many media in one thing.",
+  x:"A slideshow with photos, music, and a video clip is multimedia.",
+  s:"A class presentation has text, photos, a sound clip, and a short video. What kind of presentation is it?"},
+ {n:19,t:"Wiki",
+  d:"A website that its users can add to and edit together, like Wikipedia.",
+  h:"\"Wiki\" is Hawaiian for \"quick\": anyone can quickly edit it.",
+  x:"Wikipedia and the Minecraft Wiki are wikis.",
+  s:"A fan site for a video game lets any player add and edit pages about levels and characters. What kind of site is it?"},
+ {n:20,t:"Copyright",
+  d:"The legal right that gives a creator control over copying, sharing, and selling their original work.",
+  h:"The RIGHT to COPY belongs to the creator. It starts the moment the work is made and lasts their life plus 70 years.",
+  x:"A new song is copyrighted as soon as it's recorded.",
+  s:"A singer releases a new song. Nobody else can legally copy and sell it without permission. What protects it?"},
+ {n:21,t:"Derivative work",
+  d:"A new work based on an existing one, like a remix, translation, sequel, or movie version of a book.",
+  h:"Derive = to come FROM. A derivative work comes from another work.",
+  x:"The Hunger Games movies are derivative works of the books.",
+  s:"A fan writes a new story using the characters from a Harry Potter book. What is the new story?"},
+ {n:22,t:"Fair use act",
+  d:"The rule that lets people use small parts of copyrighted work without permission for school, news, review, or parody.",
+  h:"Fair use = a small piece, for a good reason: School, News, Review, Parody.",
+  x:"Quoting two lines of a song in a book report is fair use.",
+  s:"A teacher shows a 30-second movie clip in class to discuss it, without asking permission. What allows this?"},
+ {n:23,t:"Public domain",
+  d:"Works with no copyright protection, because it expired or was given up, so anyone can use them freely.",
+  h:"It belongs to the PUBLIC, which means everybody. Free for all, no permission needed.",
+  x:"Shakespeare's plays, and since 2024, the 1928 \"Steamboat Willie\" Mickey Mouse.",
+  s:"Anyone can perform Shakespeare's plays or print them for free without asking. Where are these works?"},
+ {n:24,t:"Intellectual property",
+  d:"Creations of the mind, like inventions, music, writing, art, and logos, that the law lets people own.",
+  h:"INTELLECT = the mind. Intellectual property = property of the mind.",
+  x:"Copyrights, patents, and trademarks all protect intellectual property.",
+  s:"Inventions, song lyrics, logos, and novels are all creations of the mind that can be owned. What are they called?"},
+ {n:25,t:"Creative Commons",
+  d:"Free licenses creators can put on their work so others may share or reuse it if they follow set rules.",
+  h:"Creators share in COMMON: \"some rights reserved\" instead of \"all rights reserved.\"",
+  x:"A CC BY license means \"use it, just give me credit.\"",
+  s:"A photographer posts a photo with a \"CC BY\" license: free to use as long as you give credit. Where does that license come from?"},
+ {n:26,t:".com",
+  d:"A domain ending used mainly by businesses and companies (commercial sites).",
+  h:"COM = COMpany, COMmercial. COM sells.",
+  x:"amazon.com, nike.com",
+  s:"A company that sells shoes online would most likely use which domain ending?"},
+ {n:27,t:".edu",
+  d:"A domain ending used by colleges and universities (educational institutions).",
+  h:"EDU = EDUcation. EDU teaches.",
+  x:"harvard.edu, uga.edu",
+  s:"The University of Georgia's website ends in which domain?"},
+ {n:28,t:".gov",
+  d:"A domain ending used only by U.S. government agencies and offices.",
+  h:"GOV = GOVernment. GOV governs.",
+  x:"whitehouse.gov, nasa.gov, irs.gov",
+  s:"The White House's official website ends in which domain?"},
+ {n:29,t:".net",
+  d:"A domain ending first made for network companies, like internet providers.",
+  h:"NET = NETwork. NET connects.",
+  x:"It started with network companies; today sites like speedtest.net use it too.",
+  s:"An internet provider or network company would traditionally use which domain ending?"},
+ {n:30,t:".org",
+  d:"A domain ending used mostly by organizations, especially nonprofits like charities.",
+  h:"ORG = ORGanization. ORG helps.",
+  x:"redcross.org, wikipedia.org",
+  s:"A nonprofit charity like the Red Cross would use which domain ending?"},
+ {n:31,t:"Phishing",
+  d:"Fake emails, texts, or websites that pretend to be a trusted company to trick you into giving personal info.",
+  h:"Like FISHING: they dangle bait and wait for you to bite. The PH is for \"phony.\"",
+  x:"\"Your bank account is locked! Click here and enter your password.\"",
+  s:"An email \"from your bank\" says your account is locked and asks you to click a link and type your password. What is this?"},
+ {n:32,t:"Malware",
+  d:"Malicious software: any program made to harm a device, steal data, or take control of it.",
+  h:"MAL = bad (malicious). Malware is the whole family: viruses, worms, spyware, ransomware.",
+  x:"Viruses, worms, spyware, adware, and ransomware are all types of malware.",
+  s:"Your antivirus blocked \"harmful software\" but didn't say which type. What's the general name for harmful software?"},
+ {n:33,t:"Zombie",
+  d:"A computer secretly taken over by a hacker and controlled remotely, without its owner knowing.",
+  h:"A zombie obeys its master and has no idea. Your computer can be one while you watch YouTube.",
+  x:"Zombie computers get used to send spam or join attacks.",
+  s:"A hacker has been secretly using your computer to send spam at night, and you have no idea. What is your computer?"},
+ {n:34,t:"Adware",
+  d:"Software that floods your device with unwanted ads and pop-ups, often bundled with free programs.",
+  h:"AD-ware = ADs. It shouts ads at you.",
+  x:"Pop-ups you can't close after installing a \"free\" app.",
+  s:"After installing a free game, your screen keeps showing pop-up ads you never asked for. What did you probably get?"},
+ {n:35,t:"White hat hacker",
+  d:"An ethical hacker who gets permission to break into systems to find security holes so they can be fixed.",
+  h:"In old cowboy movies the good guys wore white hats. White hats fix.",
+  x:"Companies pay \"bug bounties\" to white hats who find flaws.",
+  s:"A company pays a security expert to try to break into its network so it can fix the weak spots. Who is the expert?"},
+ {n:36,t:"Black hat hacker",
+  d:"A criminal hacker who breaks into systems without permission to steal, cause damage, or make money.",
+  h:"Cowboy-movie villains wore black hats. Black hats break.",
+  x:"Stealing credit card numbers from a store's database.",
+  s:"Someone breaks into a store's system without permission and steals credit card numbers to sell. Who is that person?"},
+ {n:37,t:"Spyware",
+  d:"Software that secretly watches what you do and collects info, like passwords, without your permission.",
+  h:"SPY-ware: it SPIES. Quiet, hidden, always watching and recording.",
+  x:"A keylogger that records every key you type is spyware.",
+  s:"A hidden program records every key you type, including passwords, and sends it to a stranger. What is it?"},
+ {n:38,t:"Ransomware",
+  d:"Malware that locks or encrypts your files and demands payment to unlock them.",
+  h:"RANSOM = pay to get it back. Your files are held hostage.",
+  x:"In 2017, WannaCry ransomware locked about 200,000 computers in 150 countries.",
+  s:"A hospital's files suddenly lock and a message demands $50,000 in Bitcoin to unlock them. What is this?"},
+ {n:39,t:"Botnet",
+  d:"A network of zombie computers controlled together by one attacker, used for spam or attacks.",
+  h:"BOT + NET = a NETwork of roBOTs. A zombie army.",
+  x:"The Mirai botnet (2016) used hacked cameras and routers to knock big sites offline.",
+  s:"A hacker controls 10,000 infected computers at once and uses them together to send spam. What is this group?"},
+ {n:40,t:"Worm",
+  d:"Malware that copies itself and spreads across networks on its own, without needing a host file.",
+  h:"A worm crawls by itself. No host file, no help, no clicking needed.",
+  x:"The 2003 \"SQL Slammer\" worm spread around the world in about 10 minutes.",
+  s:"Malware spreads from computer to computer across a school network all by itself, without anyone opening a file. What is it?"},
+ {n:41,t:"Virus",
+  d:"Malicious code that attaches to a file or program and spreads when that file is opened or shared.",
+  h:"Like a cold virus, it needs a HOST. It hitches a ride on a file and waits for you to open it.",
+  x:"A virus hidden in a downloaded game file runs when you open the game.",
+  s:"Harmful code hidden in a downloaded file only spreads after you open the file and send it to friends. What is it?"},
+ {n:42,t:"DDoS attack",
+  d:"Distributed Denial of Service: many computers flood a website with fake traffic so real users can't get in.",
+  h:"D-D-o-S: \"Dozens and Dozens of Senders.\" Too many requests, so the site goes down.",
+  x:"Botnets of zombie computers usually launch DDoS attacks.",
+  s:"Thousands of computers flood a game's servers with fake traffic at once, so real players can't log in. What is this?"}
+];
+const LEVELS = [
+ {id:"web-basics", name:"Web Basics", terms:[1,2,3,4,5,6,7,8],
+  chant:"The internet is the roads, the web is the stores. Browser drives, URL is the address, server serves, search engine finds, links jump."},
+ {id:"under-the-hood", name:"Under the Hood", terms:[9,12,13,14,15],
+  chant:"ARPA started it in '69. ISP sells the pipe. IP is the number address. VoIP talks. FTP moves files."},
+ {id:"online-life", name:"Online Life", terms:[11,16,17,18,19],
+  chant:"Cloud keeps it online. Email sends. Streams play now. Multimedia mixes. Wikis let everyone write."},
+ {id:"who-owns-it", name:"Who Owns It", terms:[24,20,10,21,22,23,25],
+  chant:"Ideas are property. Copyright guards them, pirates steal them, remixes derive from them, fair use borrows a bit, public domain is free for all, Creative Commons shares with rules."},
+ {id:"domains", name:"Domain Endings", terms:[26,27,28,29,30],
+  chant:"COM sells. EDU teaches. GOV governs. NET connects. ORG helps."},
+ {id:"sneaky-software", name:"Sneaky Software", terms:[32,41,40,37,34,38],
+  chant:"Malware is the family. Virus needs a host, worm crawls alone, spyware watches, adware shouts, ransomware holds your files hostage."},
+ {id:"attacks", name:"Attacks & Hackers", terms:[31,33,39,42,35,36],
+  chant:"Phishing baits you. A zombie obeys. A zombie army is a botnet, and a botnet floods a site in a DDoS. White hats fix, black hats break."},
+ {id:"final", name:"Final Wave", boss:true, terms:TERMS.map(t => t.n), chant:""}
+];
+LEVELS.forEach((L, i) => L.num = i + 1);
+const BYN = {}; TERMS.forEach(t => BYN[t.n] = t);
+
+/* ============ PIXEL SPRITES ============ */
+const SPR = {
+ squid: [["...XX...","..XXXX..",".XXXXXX.","XX.XX.XX","XXXXXXXX","..X..X..",".X.XX.X.","X.X..X.X"],
+         ["...XX...","..XXXX..",".XXXXXX.","XX.XX.XX","XXXXXXXX",".X.XX.X.","X......X",".X....X."]],
+ crab:  [["..X.....X..","...X...X...","..XXXXXXX..",".XX.XXX.XX.","XXXXXXXXXXX","X.XXXXXXX.X","X.X.....X.X","...XX.XX..."],
+         ["..X.....X..","X..X...X..X","X.XXXXXXX.X","XXX.XXX.XXX","XXXXXXXXXXX",".XXXXXXXXX.","..X.....X..",".X.......X."]],
+ octo:  [["....XXXX....",".XXXXXXXXXX.","XXXXXXXXXXXX","XXX..XX..XXX","XXXXXXXXXXXX","...XX..XX...","..XX.XX.XX..","XX........XX"],
+         ["....XXXX....",".XXXXXXXXXX.","XXXXXXXXXXXX","XXX..XX..XXX","XXXXXXXXXXXX","..XXX..XXX..",".XX..XX..XX.","..XX....XX.."]],
+ ship:  [["......X......",".....XXX.....",".....XXX.....",".XXXXXXXXXXX.","XXXXXXXXXXXXX","XXXXXXXXXXXXX","XXXXXXXXXXXXX","XXXXXXXXXXXXX"]],
+ star:  [["...X...","...X...","XXXXXXX",".XXXXX.","..XXX..",".XX.XX.",".X...X."]]
+};
+const KINDS = ["squid", "crab", "octo"];
+function pathOf(rows) {
+  let d = "";
+  rows.forEach((r, y) => {
+    let x = 0;
+    while (x < r.length) {
+      if (r[x] === "X") { const s = x; while (x < r.length && r[x] === "X") x++; d += "M" + s + " " + y + "h" + (x - s) + "v1h-" + (x - s) + "z"; }
+      else x++;
+    }
+  });
+  return d;
+}
+function sprite(kind, frame, cls) {
+  const rows = SPR[kind][frame || 0];
+  return '<svg class="px ' + (cls || "") + '" viewBox="0 0 ' + rows[0].length + " " + rows.length + '" aria-hidden="true"><path fill="currentColor" d="' + pathOf(rows) + '"/></svg>';
+}
+const starRow = (n, max) => '<span class="stars">' + Array.from({ length: max }, (_, i) => sprite("star", 0, i < n ? "on" : "")).join("") + "</span>";
+
+/* ============ STATE ============ */
+const KEY = "netinvaders.v1";
+function blank() { return { best:{}, stars:{}, muted:false }; }
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.best) return Object.assign(blank(), s); } catch (e) {}
+  return blank();
+}
+let S = load();
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+const totalStars = () => LEVELS.reduce((a, L) => a + (S.stars[L.id] || 0), 0);
+// Recommended next level: first uncleared one, then the Final Wave, then the weakest.
+function nextLevel() {
+  for (const L of LEVELS) if (!S.stars[L.id]) return L;
+  return LEVELS.slice().sort((a, b) => (S.stars[a.id] || 0) - (S.stars[b.id] || 0))[0];
+}
+
+/* ============ SOUND (short blips only) ============ */
+let AC = null;
+function ac() {
+  if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = null; } }
+  if (AC && AC.state === "suspended") AC.resume();
+  return AC;
+}
+function tone(f, start, dur, type, vol, fEnd) {
+  const a = ac(); if (!a || S.muted) return;
+  const o = a.createOscillator(), g = a.createGain(), t0 = a.currentTime + start;
+  o.type = type || "square"; o.frequency.setValueAtTime(f, t0);
+  if (fEnd) o.frequency.exponentialRampToValueAtTime(fEnd, t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol || 0.06, t0 + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g).connect(a.destination); o.start(t0); o.stop(t0 + dur + 0.02);
+}
+function noise(dur, vol) {
+  const a = ac(); if (!a || S.muted) return;
+  const len = Math.floor(a.sampleRate * dur), buf = a.createBuffer(1, len, a.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+  src.buffer = buf; f.type = "lowpass"; f.frequency.value = 1400; g.gain.value = vol;
+  src.connect(f).connect(g).connect(a.destination); src.start();
+}
+const SFX = {
+  hit(combo) { const up = Math.pow(2, Math.min(combo, 12) / 12); tone(1100 * up, 0, .09, "square", .04, 260 * up); noise(.18, .12); },
+  miss() { tone(196, 0, .12, "square", .05); tone(147, .1, .2, "square", .05); },
+  start() { [392, 523.25, 659.25].forEach((f, i) => tone(f, i * .08, .12, "square", .04)); },
+  clear() { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, i * .09, .18, "square", .045)); },
+  down() { [392, 311.1, 246.9, 196].forEach((f, i) => tone(f, i * .14, .2, "square", .05)); },
+  tick() { tone(660, 0, .04, "square", .025); }
+};
+const ICON_ON = '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9a4 4 0 0 1 0 6"/><path d="M19.5 6.5a8 8 0 0 1 0 11"/>';
+const ICON_OFF = '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/>';
+const ICON_BACK = '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>';
+const ICON_X = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const muteBtn = () => '<button class="icon mute" aria-label="' + (S.muted ? "Sound off" : "Sound on") + '"><svg viewBox="0 0 24 24">' + (S.muted ? ICON_OFF : ICON_ON) + "</svg></button>";
+function bindMute() {
+  document.querySelectorAll(".mute").forEach(b => b.onclick = () => {
+    S.muted = !S.muted; save();
+    b.setAttribute("aria-label", S.muted ? "Sound off" : "Sound on");
+    b.innerHTML = '<svg viewBox="0 0 24 24">' + (S.muted ? ICON_OFF : ICON_ON) + "</svg>";
+    if (!S.muted) SFX.tick();
+  });
+}
+
+/* ============ HELPERS ============ */
+const $app = document.getElementById("app");
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+let keyHandler = null;
+let onBack = null;
+function render(html, back) {
+  endGame();
+  $app.innerHTML = html;
+  onBack = back || null;
+  const b = document.getElementById("back");
+  if (b) b.onclick = () => onBack && onBack();
+  bindMute();
+  keyHandler = null;
+  window.scrollTo(0, 0);
+}
+const topBar = (title, icon) => '<header class="top"><button class="icon" id="back" aria-label="Back">' + (icon || ICON_BACK) + '</button><span class="ttl">' + title + "</span>" + muteBtn() + "</header>";
+
+/* ============ HOME ============ */
+function home() {
+  const nx = nextLevel();
+  const rows = LEVELS.map((L, i) => {
+    const st = S.stars[L.id] || 0, best = S.best[L.id];
+    const meta = L.boss ? "All 42 terms in 7 boards" : L.terms.length + " terms";
+    return '<li><button data-l="' + i + '" class="' + (L === nx ? "is-next" : "") + '"><span class="lv">' + (L.boss ? "!!" : String(L.num).padStart(2, "0")) + '</span><span class="nm">' + esc(L.name) + "<small>" + meta + (best ? " · best " + best.toLocaleString() : "") + "</small></span>" + starRow(st, 3) + "</button></li>";
+  }).join("");
+  const troop = KINDS.map(k => "<span>" + sprite(k, 0, "a") + sprite(k, 1, "b") + "</span>").join("");
+  render(
+    '<div class="wrap"><div class="home">' +
+      '<div class="troop" aria-hidden="true">' + troop + "</div>" +
+      '<h1 class="title">NET<br><em>INVADERS</em></h1>' +
+      '<p class="sub">42 terms from your Internet test. A definition shows up, you shoot the term it matches. Miss and you lose a life.</p>' +
+      '<div class="starbar">' + sprite("star") + totalStars() + " <span>/ 24 stars</span></div>" +
+      '<button class="btn primary wide" id="next">Play ' + (nx.boss ? "the Final Wave" : "level " + nx.num + ": " + esc(nx.name)) + "</button>" +
+      '<ol class="levels">' + rows + "</ol>" +
+    "</div></div>");
+  document.getElementById("next").onclick = () => brief(nx);
+  $app.querySelectorAll(".levels button").forEach(b => b.onclick = () => brief(LEVELS[+b.dataset.l]));
+}
+
+/* ============ BRIEFING (teach first) ============ */
+function brief(L) {
+  let body;
+  if (L.boss) {
+    body = '<p class="sub">Every term from the study guide, 6 at a time, 7 boards in a row. You get 5 lives for the whole run. ' +
+      (LEVELS.slice(0, 7).every(l => S.stars[l.id]) ? "You've cleared every level. Go." : "Best after you clear levels 1 to 7.") + "</p>";
+  } else {
+    const intel = L.terms.map(n => {
+      const t = BYN[n];
+      return '<li><p class="t">' + esc(t.t) + "<span>#" + t.n + '</span></p><p class="d">' + esc(t.d) + '</p><p class="h">' + esc(t.h) + '</p><p class="x">' + esc(t.x) + "</p></li>";
+    }).join("");
+    body = '<p class="sub">Read the intel, then defend. ' + L.terms.length + ' invaders incoming.</p>' +
+      '<div class="chant"><p class="label">Say it out loud</p><p class="say">' + esc(L.chant) + "</p></div>" +
+      '<ol class="intel">' + intel + "</ol>";
+  }
+  render(
+    '<div class="wrap">' + topBar("Level " + L.num + " of 8") +
+    '<div class="brief"><h2 class="lvl">' + esc(L.name) + "</h2>" + body + "</div></div>" +
+    '<div class="dock"><button class="btn primary wide" id="go">Start ' + (L.boss ? "Final Wave" : "level " + L.num) + "</button></div>",
+    home);
+  document.getElementById("go").onclick = () => play(L);
+  keyHandler = e => { if (e.key === "Enter") play(L); };
+}
+
+/* ============ GAME ============ */
+const CLUE_SECS = 12;   // speed bonus window; never a fail
+let G = null;
+function later(fn, ms) { const g = G; return setTimeout(() => { if (G === g) fn(); }, ms); }
+function endGame() { G = null; }
+const mult = c => c >= 10 ? 4 : c >= 6 ? 3 : c >= 3 ? 2 : 1;
+
+function play(L) {
+  const boards = [];
+  if (L.boss) { const all = shuffle(L.terms); for (let i = 0; i < all.length; i += 6) boards.push(all.slice(i, i + 6)); }
+  else boards.push(shuffle(L.terms));
+  render(
+    '<div class="game">' +
+      '<div class="hud"><button class="icon" id="back" aria-label="Quit">' + ICON_X + '</button><div class="score" id="score">0</div><span class="combo" id="combo">x1</span><div class="lives" id="lives"></div>' + muteBtn() + "</div>" +
+      '<div class="clue"><div class="head"><span class="label kind" id="kind"></span><span class="label" id="left"></span></div><p class="txt" id="clue"></p><p class="hint" id="hint" hidden></p></div>' +
+      '<div class="speed"><i id="speed"></i></div>' +
+      '<div class="board" id="board"></div>' +
+    "</div>",
+    () => brief(L));
+  G = { L, boards, bi: 0, lives: L.boss ? 5 : 3, maxLives: L.boss ? 5 : 3, score: 0, combo: 0, bestCombo: 0, shot: 0,
+        misses: [], alive: [], target: null, missed: false, lock: true, clueAt: 0 };
+  ac(); SFX.start();
+  hud();
+  deal();
+}
+function hud() {
+  document.getElementById("score").textContent = G.score.toLocaleString();
+  const c = document.getElementById("combo"), m = mult(G.combo);
+  c.textContent = "x" + m; c.classList.toggle("hot", m > 1);
+  document.getElementById("lives").innerHTML = Array.from({ length: G.maxLives }, (_, i) => sprite("ship", 0, i < G.lives ? "" : "off")).join("");
+}
+function deal() {
+  const ns = G.boards[G.bi];
+  G.alive = ns.slice();
+  document.getElementById("board").innerHTML = ns.map((n, i) =>
+    '<button class="tile" data-n="' + n + '">' + sprite(KINDS[Math.floor(i / 2) % 3], i % 2) + '<span class="lb">' + esc(BYN[n].t) + "</span></button>").join("");
+  document.querySelectorAll(".tile").forEach(b => b.onclick = () => shoot(+b.dataset.n, b));
+  if (G.boards.length > 1 && G.bi > 0) {
+    document.getElementById("kind").textContent = "Board " + (G.bi + 1) + " of " + G.boards.length;
+    document.getElementById("clue").textContent = "Next wave incoming...";
+    document.getElementById("hint").hidden = true;
+    document.getElementById("left").textContent = "";
+    G.lock = true;
+    later(nextClue, 900);
+  } else nextClue();
+}
+function nextClue() {
+  G.lock = false; G.missed = false;
+  G.target = G.alive[Math.floor(Math.random() * G.alive.length)];
+  const scen = Math.random() < 0.3, t = BYN[G.target];
+  document.getElementById("kind").textContent = scen ? "Real life" : "Definition";
+  document.getElementById("clue").textContent = scen ? t.s : t.d;
+  document.getElementById("hint").hidden = true;
+  document.getElementById("left").textContent = (G.boards.length > 1 ? "Board " + (G.bi + 1) + "/" + G.boards.length + " · " : "") + G.alive.length + " left";
+  // speed bar: restart a CSS transition (bonus only)
+  const bar = document.getElementById("speed");
+  bar.style.transition = "none"; bar.style.transform = "scaleX(1)";
+  void bar.offsetWidth;
+  bar.style.transition = "transform " + CLUE_SECS + "s linear"; bar.style.transform = "scaleX(0)";
+  G.clueAt = performance.now();
+}
+function centerOf(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 - 6 }; }
+
+function shoot(n, btn) {
+  if (!G || G.lock) return;
+  ac();
+  const t = BYN[G.target];
+  if (n === G.target) {
+    let pts;
+    if (!G.missed) {
+      G.combo++; G.bestCombo = Math.max(G.bestCombo, G.combo);
+      const secs = (performance.now() - G.clueAt) / 1000;
+      pts = (100 + Math.round(100 * Math.max(0, 1 - secs / CLUE_SECS))) * mult(G.combo);
+    } else pts = 25;
+    G.score += pts; G.shot++;
+    G.alive = G.alive.filter(x => x !== n);
+    G.lock = true;
+    const bar = document.getElementById("speed"); bar.style.transition = "none"; bar.style.transform = "scaleX(" + getComputedStyle(bar).transform.replace(/^matrix\(([^,]+).*$/, "$1") + ")";
+    document.querySelectorAll(".tile.reveal").forEach(x => x.classList.remove("reveal"));
+    btn.classList.add("hit");
+    burst(centerOf(btn), "+" + pts);
+    SFX.hit(G.combo);
+    hud();
+    later(() => { btn.classList.remove("hit"); btn.classList.add("gone"); btn.disabled = true; }, 160);
+    if (!G.alive.length) later(boardDone, 520);
+    else later(nextClue, 380);
+  } else {
+    if (btn.classList.contains("gone")) return;
+    G.combo = 0; G.lives--;
+    if (!G.missed) { G.missed = true; if (!G.misses.includes(G.target)) G.misses.push(G.target); }
+    SFX.miss();
+    btn.classList.add("nope", "wiggle");
+    later(() => btn.classList.remove("nope", "wiggle"), 450);
+    const right = document.querySelector('.tile[data-n="' + G.target + '"]');
+    right.classList.add("reveal");
+    const hint = document.getElementById("hint");
+    hint.innerHTML = "<b>" + esc(t.t) + "</b><br>" + esc(t.h);
+    hint.hidden = false;
+    hud();
+    if (G.lives <= 0) { G.lock = true; later(() => finish(false), 900); }
+  }
+}
+function boardDone() {
+  if (G.bi < G.boards.length - 1) { G.bi++; SFX.tick(); deal(); }
+  else finish(true);
+}
+
+/* ============ RESULTS ============ */
+function finish(won) {
+  const g = G, L = g.L;
+  let stars = 0;
+  if (won) {
+    g.score += g.lives * 100;
+    stars = g.misses.length === 0 ? 3 : g.misses.length <= 2 ? 2 : 1;
+  }
+  const prevBest = S.best[L.id] || 0, isBest = g.score > prevBest;
+  if (isBest) S.best[L.id] = g.score;
+  S.stars[L.id] = Math.max(S.stars[L.id] || 0, stars);
+  save();
+  won ? SFX.clear() : SFX.down();
+  const nx = nextLevel();
+  const review = g.misses.map(n => "<li><b>" + esc(BYN[n].t) + "</b><span>" + esc(BYN[n].h) + "</span></li>").join("");
+  render(
+    '<div class="wrap">' + topBar("Level " + L.num + " · " + esc(L.name)) +
+    '<div class="res">' +
+      '<p class="kicker' + (won ? "" : " loss") + '">' + (won ? (stars === 3 ? "Perfect defense" : "Wave cleared") : "Network down") + "</p>" +
+      '<p class="big">' + g.score.toLocaleString() + "</p>" +
+      starRow(stars, 3) +
+      '<p class="sub">' + (isBest ? (prevBest ? "New best! Old best was " + prevBest.toLocaleString() + "." : "New best!") : "Best: " + prevBest.toLocaleString()) +
+        (won ? " Includes +" + g.lives * 100 + " for lives left." : "") + "</p>" +
+      '<div class="facts"><div><b>' + g.shot + "/" + L.terms.length + "</b><span>shot down</span></div><div><b>" + g.bestCombo + "</b><span>best streak</span></div><div><b>" + g.misses.length + "</b><span>" + (g.misses.length === 1 ? "miss" : "misses") + "</span></div></div>" +
+      (review ? '<p class="label">Say these out loud once</p><ul class="review">' + review + "</ul>" : "") +
+      (won
+        ? '<button class="btn primary wide" id="nx">' + (nx === L ? "Play again for 3 stars" : "Next: " + (nx.boss ? "Final Wave" : "level " + nx.num + " " + esc(nx.name))) + "</button>" +
+          '<div class="row"><button class="btn" id="again">Replay</button><button class="btn" id="lv">Levels</button></div>'
+        : '<button class="btn primary wide" id="again">Try again</button>' +
+          '<div class="row"><button class="btn" id="intel">Read intel</button><button class="btn" id="lv">Levels</button></div>') +
+    "</div></div>",
+    home);
+  const nxb = document.getElementById("nx");
+  if (nxb) nxb.onclick = () => (nx === L ? play(L) : brief(nx));
+  document.getElementById("again").onclick = () => play(L);
+  document.getElementById("lv").onclick = home;
+  const ib = document.getElementById("intel"); if (ib) ib.onclick = () => brief(L);
+  keyHandler = e => { if (e.key === "Enter") (nxb || document.getElementById("again")).click(); };
+}
+
+/* ============ HIT BURST (the only motion) ============ */
+const fx = document.getElementById("fx"), ctx = fx.getContext("2d");
+let parts = [], texts = [], fxOn = false;
+const reduce = () => window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+function burst(p, label) {
+  const css = getComputedStyle(document.documentElement);
+  const hot = css.getPropertyValue("--hot").trim(), ink = css.getPropertyValue("--ink").trim();
+  texts.push({ x: p.x, y: p.y - 20, txt: label, life: .7, col: hot });
+  if (!reduce()) for (let i = 0; i < 22; i++) {
+    const a = Math.random() * Math.PI * 2, v = 80 + Math.random() * 180;
+    parts.push({ x: p.x, y: p.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: .45 + Math.random() * .2, s: 3 + Math.floor(Math.random() * 3), col: i % 3 ? hot : ink });
+  }
+  if (!fxOn) { fxOn = true; let last = performance.now(); requestAnimationFrame(function f(now) { const dt = Math.min(.05, (now - last) / 1000); last = now; if (drawFx(dt)) requestAnimationFrame(f); else fxOn = false; }); }
+}
+function drawFx(dt) {
+  const dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight;
+  if (fx.width !== Math.round(W * dpr) || fx.height !== Math.round(H * dpr)) { fx.width = Math.round(W * dpr); fx.height = Math.round(H * dpr); }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  parts = parts.filter(p => (p.life -= dt) > 0);
+  parts.forEach(p => { p.vy += 420 * dt; p.x += p.vx * dt; p.y += p.vy * dt; ctx.fillStyle = p.col; ctx.fillRect(Math.round(p.x), Math.round(p.y), p.s, p.s); });
+  texts = texts.filter(t => (t.life -= dt) > 0);
+  ctx.font = '12px "Press Start 2P", monospace'; ctx.textAlign = "center";
+  texts.forEach(t => { t.y -= 40 * dt; ctx.globalAlpha = Math.min(1, t.life / .3); ctx.fillStyle = t.col; ctx.fillText(t.txt, t.x, t.y); ctx.globalAlpha = 1; });
+  return parts.length || texts.length;
+}
+
+/* ============ BOOT ============ */
+document.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "Escape" && onBack) { onBack(); return; }
+  if (keyHandler) keyHandler(e);
+});
+home();
+</script>
+</body>
+</html>
